@@ -98,6 +98,9 @@ namespace Aws
                 static constexpr char JSON_KEY_CONFIG_SHADOW[] = "config-shadow";
                 static constexpr char JSON_KEY_SENSOR_PUBLISH[] = "sensor-publish";
 
+                static constexpr char JSON_KEY_CUSTOM[] = "custom";
+                static constexpr char JSON_KEY_BINSENTRY_S3_PRESIGNED_URL[] = "binsentry-s3-presigned-url";
+
                 static constexpr char DEFAULT_LOCK_FILE_PATH[] = "/run/lock/";
 
                 static constexpr char JSON_KEY_SECURE_ELEMENT[] = "secure-element";
@@ -471,6 +474,23 @@ namespace Aws
                     mutable std::vector<SensorSettings> settings;
                 };
                 SensorPublish sensorPublish;
+
+                struct BinsentryCommBinS3PresignedURL : public LoadableFromJsonAndCliAndEnvironment
+                {
+                    bool LoadFromJson(const Crt::JsonView &json) override;
+                    bool LoadFromCliArgs(const CliArgs &cliArgs) override;
+                    bool LoadFromEnvironment() override { return true; }
+                    bool Validate() const override;
+                    /** Serialize BinsentryCommBinS3PresignedURL feature To Json Object **/
+                    void SerializeToObject(Crt::JsonObject &object) const;
+
+                    static constexpr char CLI_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL[] = "--enable-binsentry-commbin-s3presignedurl";
+
+                    static constexpr char JSON_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL[] = "enabled";
+
+                    bool enabled{true};     // TODO (MV): Return this to false once JSON import is working
+                };
+                BinsentryCommBinS3PresignedURL binsentryCommBinS3PresignedUrl;
             };
 
             class Config

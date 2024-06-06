@@ -60,6 +60,14 @@
 
 #endif
 
+#if !defined(EXCLUDE_CUSTOM)
+#    if !defined(EXCLUDE_BINSENTRY_S3_PRESIGNED_URL)
+
+#        include "custom/binsentry/commercial-bin-s3-presigned-url/BinsentryCommBinS3PresignedURLFeature.h"
+
+#    endif
+#endif
+
 #include <csignal>
 #include <memory>
 #include <thread>
@@ -91,6 +99,9 @@ using namespace Aws::Iot::DeviceClient::Shadow;
 #endif
 #if !defined(EXCLUDE_SENSOR_PUBLISH)
 using namespace Aws::Iot::DeviceClient::SensorPublish;
+#endif
+#if !defined(EXCLUDE_BINSENTRY_S3_PRESIGNED_URL)
+using namespace Aws::Iot::DeviceClient::Custom::Binsentry;
 #endif
 
 constexpr char TAG[] = "Main.cpp";
@@ -621,6 +632,33 @@ int main(int argc, char *argv[])
             DC_FATAL_ERROR);
         deviceClientAbort(
             "Invalid configuration. Sensor Publish configuration is enabled but feature is not compiled into binary.",
+            EXIT_FAILURE);
+    }
+#endif
+
+#if !defined(EXCLUDE_CUSTOM) && !defined(EXCLUDE_BINSENTRY_S3_PRESIGNED_URL) && !defined(DISABLE_MQTT)
+    if (config.config.binsentryCommBinS3PresignedUrl.enabled)
+    {
+        shared_ptr<S3PresignedURLFeature> binsentryS3PresignedURL;
+        LOG_INFO(TAG, "BinSentry S3 Pre-signed URL feature is enabled");
+        binsentryS3PresignedURL = make_shared<S3PresignedURLFeature>();
+        binsentryS3PresignedURL->init(resourceManager, listener, config.config);
+        features->add(binsentryS3PresignedURL->getName(), binsentryS3PresignedURL);
+    }
+    else
+    {
+        LOG_INFO(TAG, "BinSentry S3 Pre-signed URL feature is disabled");
+        features->add(PubSubFeature::NAME, nullptr);
+    }
+#else
+    if (config.config.binsentryCommBinS3PresignedUrl.enabled)
+    {
+        LOGM_ERROR(
+            TAG,
+            "*** %s: Custom BinSentry S3 Pre-signed URL configuration is enabled but feature is not compiled into binary.",
+            DC_FATAL_ERROR);
+        deviceClientAbort(
+            "Invalid configuration. Custom BinSentry S3 Pre-signed URL configuration is enabled but feature is not compiled into binary.",
             EXIT_FAILURE);
     }
 #endif

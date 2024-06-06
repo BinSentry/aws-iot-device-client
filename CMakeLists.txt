@@ -11,6 +11,8 @@ option(EXCLUDE_FP "Builds the device client without the IoT Fleet Provisioning F
 option(DISABLE_MQTT "WARNING: This flag is meant for internal use cases and will prevent Device Client features from operating. Builds the device client without MQTT Connection Management." OFF)
 option(EXCLUDE_SAMPLES "Builds the device client without any of the IoT Sample Features." OFF)
 option(EXCLUDE_PUBSUB "Builds the device client without the IoT Pub Sub Sample Feature." OFF)
+option(EXCLUDE_CUSTOM "Builds the device client without any of the IoT Custom Features." OFF)
+option(EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL "Builds the device client without the BinSentry IoT Commercial Bin S3 Presigned URL Feature." OFF)
 option(EXCLUDE_SHADOW "Builds the device client without any of the IoT Shadow Features (Config Shadow Feature and Sample Shadow feature)." OFF)
 option(EXCLUDE_CONFIG_SHADOW "Builds the device client without the IoT Config Shadow Feature." OFF)
 option(EXCLUDE_SAMPLE_SHADOW "Builds the device client without the IoT Sample Shadow Feature." OFF)
@@ -45,6 +47,14 @@ endif ()
 
 if (EXCLUDE_PUBSUB)
     add_definitions(-DEXCLUDE_PUBSUB)
+endif ()
+
+if (EXCLUDE_CUSTOM)
+    add_definitions(-DEXCLUDE_CUSTOM)
+endif ()
+
+if (EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
+    add_definitions(-DEXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
 endif ()
 
 if (EXCLUDE_SHADOW)
@@ -111,6 +121,13 @@ if (NOT EXCLUDE_SAMPLES)
     endif ()
 endif ()
 
+if (NOT EXCLUDE_CUSTOM)
+    if (NOT EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
+        file(GLOB COMM_BIN_S3_PRESIGNED_URL_SRC "source/custom/binsentry/commercial-bin-s3-presigned-url/*.cpp")
+        list(APPEND DC_SRC ${COMM_BIN_S3_PRESIGNED_URL_SRC})
+    endif ()
+endif ()
+
 if (NOT EXCLUDE_SHADOW)
     if (NOT EXCLUDE_CONFIG_SHADOW)
         file(GLOB CONFIG_SHADOW_SRC "source/shadow/ConfigShadow.cpp")
@@ -132,12 +149,12 @@ if (NOT EXCLUDE_SENSOR_PUBLISH_SAMPLES)
 endif()
 
 set(DC_PROJECT_NAME aws-iot-device-client)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_FLAGS_DEBUGOPT "")
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug) # Switch to Release for the "Release" build, IE cmake -DCMAKE_BUILD_TYPE=Release ../
 endif ()
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
 
@@ -158,6 +175,11 @@ configure_file("source/Version.h.in" "${PROJECT_BINARY_DIR}/Version.h")
 #########################################
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
+
+#########################################
+# sdbus-c++ dependency                  #
+#########################################
+find_package(sdbus-c++ REQUIRED)
 
 #########################################
 # AWS IoT v2 SDK C++ dependency         #
@@ -238,6 +260,7 @@ endif ()
 target_link_libraries(${DC_PROJECT_NAME} ${DEP_DC_LIBS})
 target_link_libraries(${DC_PROJECT_NAME} OpenSSL::SSL)
 target_link_libraries(${DC_PROJECT_NAME} OpenSSL::Crypto)
+target_link_libraries(${DC_PROJECT_NAME} SDBusCpp::sdbus-c++)
 
 # If you're linking statically against the SDK but dynamically against libraries such as OpenSSL,
 # you may need to link the device client against the dynamic loader provided by glib
