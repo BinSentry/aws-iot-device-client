@@ -256,9 +256,16 @@ int S3PresignedURLFeature::subscribeToS3PresignedURLResponse(int64_t timeout_ms,
         retries = 0;
     }
 
+    // protect against multiple entries
+    bool success = subscribeLock.try_lock();
+    if (!success) {
+        return AWS_OP_ERR;
+    }
+
     for (int i = 0; i < retries + 1; i++) {
         int result = subscribeToS3PresignedURLResponse(timeout_ms);
         if (result == AWS_OP_SUCCESS) {
+            subscribeLock.unlock();
             return result;
         }
 
@@ -266,11 +273,12 @@ int S3PresignedURLFeature::subscribeToS3PresignedURLResponse(int64_t timeout_ms,
         std::this_thread::sleep_for(5s);
     }
 
+    subscribeLock.unlock();
     return AWS_OP_ERR;
 }
 
 void S3PresignedURLFeature::subscribeToS3PresignedURLResponse() {
-    int subscribeResult = subscribeToS3PresignedURLResponse(1000LL * 60LL * 2LL /* timeout_ms= */, 100 /* retries= */);
+    int subscribeResult = subscribeToS3PresignedURLResponse(1000LL * 60LL * 2LL /* timeout_ms= */, 4 /* retries= */);
     if (subscribeResult != AWS_OP_SUCCESS) {
         LOGM_ERROR(TAG, "Failed to subscribe to S3 pre-signed URL response topic: Name:(%s)", getName().c_str());
     }

@@ -70,8 +70,8 @@ namespace Aws
                         void onSubscribeReceiveS3PresignedURLResponse(
                             const Crt::Mqtt::MqttConnection &connection, const Crt::String &topic,
                             const Crt::ByteBuf &payload, bool dup, Crt::Mqtt::QOS qos, bool retain);
-
-                        std::atomic<bool> hasSubscribedToS3PresignedURLResponse = false;
+                        mutable std::mutex subscribeLock;
+                        std::atomic<bool> hasSubscribedToS3PresignedURLResponse{false};
 
                         /**
                          * \brief The resource manager used to manage CRT resources
