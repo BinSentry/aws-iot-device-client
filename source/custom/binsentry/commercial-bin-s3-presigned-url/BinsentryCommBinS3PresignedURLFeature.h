@@ -64,16 +64,14 @@ namespace Aws
                         static constexpr char TAG[] = "custom/BinsentryCommBinS3PresignedURLFeature.cpp";
 
                         int publishS3PresignedURLRequest(unsigned int requestId, int64_t timeout_ms);
+                        void subscribeToS3PresignedURLResponse();
                         int subscribeToS3PresignedURLResponse(int64_t timeout_ms);
+                        int subscribeToS3PresignedURLResponse(int64_t timeout_ms, int retries);
                         void onSubscribeReceiveS3PresignedURLResponse(
                             const Crt::Mqtt::MqttConnection &connection, const Crt::String &topic,
                             const Crt::ByteBuf &payload, bool dup, Crt::Mqtt::QOS qos, bool retain);
 
-                        static constexpr unsigned int INVALID_REQUEST_ID = 0;
-                        static constexpr unsigned int FIRST_REQUEST_ID = INVALID_REQUEST_ID + 1;
-                        static constexpr unsigned int MAX_REQUEST_ID = 9999;
-                        unsigned int currentRequestId = INVALID_REQUEST_ID;
-                        void incrementRequestId();
+                        std::atomic<bool> hasSubscribedToS3PresignedURLResponse = false;
 
                         /**
                          * \brief The resource manager used to manage CRT resources
@@ -97,10 +95,18 @@ namespace Aws
                          */
                         std::string subTopic;
 
-                        static constexpr char DBUS_NAME[] = "org.binsentry.CommercialBin";
+                        static constexpr char DBUS_BUS_NAME[] = "org.binsentry.CommercialBin";
+                        static constexpr char DBUS_PATH_BASE_NAME[] = "/org/binsentry/CommercialBin";
+                        static constexpr char DBUS_PATH_NAME[] = "/org/binsentry/CommercialBin/S3PresignedURL/SensorReadingHDF5";
                         std::unique_ptr<sdbus::IConnection> dbusConnection = nullptr;
                         std::unique_ptr<ManagerAdaptor> dbusManager = nullptr;
                         std::unique_ptr<S3PresignedURLAdaptor> dbusS3PresignedURL = nullptr;
+                        mutable std::mutex dbusLock;
+
+                        void setupDBus();
+                        void cleanupDBus();
+                        bool isDBusSetup();
+                        bool checkIfSetupOrTryDBusSetup();
                     };
                 } // namespace Binsentry
             } // namespace Samples

@@ -26,9 +26,6 @@ using namespace Aws::Iot::DeviceClient::Logging;
 
 using namespace org::binsentry::S3PresignedURL;
 
-constexpr char S3PresignedURLFeature::TAG[];
-constexpr char S3PresignedURLFeature::NAME[];
-
 constexpr size_t MAX_IOT_CORE_MQTT_MESSAGE_SIZE_BYTES = 128000;
 
 
@@ -53,16 +50,17 @@ int S3PresignedURLFeature::init(
     return AWS_OP_SUCCESS;
 }
 
-void S3PresignedURLFeature::incrementRequestId() {
-    if (currentRequestId == INVALID_REQUEST_ID || currentRequestId > MAX_REQUEST_ID) {
-        currentRequestId = FIRST_REQUEST_ID;
-    } else {
-        currentRequestId++;
-    }
-}
-
 int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, int64_t timeout_ms)
 {
+    // only way to re-try subscribe is when external request comes through
+    // also not point in publishing if we don't have a subscription to the response topic
+    if (!hasSubscribedToS3PresignedURLResponse) {
+        subscribeToS3PresignedURLResponse();
+        if (!hasSubscribedToS3PresignedURLResponse) {
+            return AWS_OP_ERR;
+        }
+    }
+
     ByteBuf payload;
     std::string jsonRequest = "{\"requestId\": " + std::to_string(requestId) + "}";
     int payloadInitResult = aws_byte_buf_init(&payload, resourceManager->getAllocator(), jsonRequest.length());
@@ -121,7 +119,10 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
         LOGM_INFO(TAG, "SubReceive retained message unexpected: Topic: '%s'", topic.c_str());
     }
 
-    // TODO (MV): Check that topic matches expectation
+    if (subTopic.compare(topic) != 0) {
+        LOGM_ERROR(TAG, "SubReceive topic does not match expected: Topic: '%s'", topic.c_str());
+        return;
+    }
 
     if (payload.len == 0)
     {
@@ -129,22 +130,22 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
         return;
     }
 
-//    Examples of the response types for the /accepted MQTT topic respose will look like
-//    {
-//        "requestId": <number>,
-//        "presignedPutUrl": <string>,
-//        "secondsUntilExpiry": <number>,
-//        "timestamp": <number>, // Unix timestamp (including ms) of the time we received the request for the presigned URL
-//    }
-//    or
-//    {
-//        "requestId": <number>,
-//        "error": {
-//            "code": <number - 0 if unknown>,
-//            "message": <string>
-//        },
-//        "timestamp": <number>, // Unix timestamp (including ms) of the time we received the request for the presigned URL
-//     }
+    // Examples of the response types for the /accepted MQTT topic response will look like
+    //{
+    //    "requestId": <number>,
+    //    "presignedPutUrl": <string>,
+    //    "secondsUntilExpiry": <number>,
+    //    "timestamp": <number>, // Unix timestamp (including ms) of the time we received the request for the pre-signed URL
+    //}
+    //or
+    //{
+    //    "requestId": <number>,
+    //    "error": {
+    //        "code": <number - 0 if unknown>,
+    //        "message": <string>
+    //    },
+    //    "timestamp": <number>, // Unix timestamp (including ms) of the time we received the request for the pre-signed URL
+    // }
 
     const std::basic_string<char, std::char_traits<char>, StlAllocator<char>> jsonString(reinterpret_cast<char *>(payload.buffer), payload.len);
 
@@ -170,17 +171,27 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
         {
             // have error
             JsonView jsonView2 = jsonView.GetJsonObject(jsonKey);
+
+            int jsonErrorCode = 0;  // default to unknown error code
+            std::string message;
+
             const char *jsonKey2 = "code";
             if (jsonView2.ValueExists(jsonKey2))
             {
-                int jsonErrorCode = jsonView2.GetInteger(jsonKey2);
+                jsonErrorCode = jsonView2.GetInteger(jsonKey2);
                 if (jsonErrorCode < 0 || jsonErrorCode > 1)
                 {
                     returnCode = -(int32_t)jsonErrorCode;
                 }
-
-                LOGM_ERROR(TAG, "SubReceive error: %d", jsonErrorCode);
             }
+
+            jsonKey2 = "message";
+            if (jsonView2.ValueExists(jsonKey2))
+            {
+                message = jsonView2.GetString(jsonKey2);
+            }
+
+            LOGM_ERROR(TAG, "SubReceive error: %d, '%s'", jsonErrorCode, message.c_str());
         } else {
             jsonKey = "presignedPutUrl";
             bool presignedPutUrlExists = jsonView.ValueExists(jsonKey);
@@ -197,8 +208,6 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
         LOGM_ERROR(TAG, "Couldn't parse JSON payload. GetErrorMessage returns: %s", jsonObj.GetErrorMessage().c_str());
     }
 
-    // TODO (MV): Check payload for requestID and use that to emit signal
-    // TODO (MV): If use signal instead then don't have to marshall back to request
     if (dbusS3PresignedURL != nullptr) {
         dbusS3PresignedURL->emitS3PreSignedURLResponse(requestId, returnCode, responseJSONString);
     }
@@ -231,6 +240,10 @@ int S3PresignedURLFeature::subscribeToS3PresignedURLResponse(int64_t timeout_ms)
 
     unique_lock<mutex> lk(mtxLambdaDone);
     if (cvLambdaDone.wait_for(lk, std::chrono::milliseconds(timeout_ms), [&]{return finished;})) {
+        if (subscribeErrorCode == AWS_OP_SUCCESS) {
+            hasSubscribedToS3PresignedURLResponse = true;
+        }
+
         return subscribeErrorCode;
     } else {
         LOGM_ERROR(TAG, "SubAck timeout: Name:(%s)", getName().c_str());
@@ -238,42 +251,64 @@ int S3PresignedURLFeature::subscribeToS3PresignedURLResponse(int64_t timeout_ms)
     }
 }
 
-// TODO (MV): Confirm that subscription is automatically re-subscribed across new connections
+int S3PresignedURLFeature::subscribeToS3PresignedURLResponse(int64_t timeout_ms, int retries) {
+    if (retries < 0) {
+        retries = 0;
+    }
+
+    for (int i = 0; i < retries + 1; i++) {
+        int result = subscribeToS3PresignedURLResponse(timeout_ms);
+        if (result == AWS_OP_SUCCESS) {
+            return result;
+        }
+
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(5s);
+    }
+
+    return AWS_OP_ERR;
+}
+
+void S3PresignedURLFeature::subscribeToS3PresignedURLResponse() {
+    int subscribeResult = subscribeToS3PresignedURLResponse(1000LL * 60LL * 2LL /* timeout_ms= */, 100 /* retries= */);
+    if (subscribeResult != AWS_OP_SUCCESS) {
+        LOGM_ERROR(TAG, "Failed to subscribe to S3 pre-signed URL response topic: Name:(%s)", getName().c_str());
+    }
+}
+
 int S3PresignedURLFeature::start()
 {
     LOGM_INFO(TAG, "Starting %s", getName().c_str());
 
-    int subscribeResult = subscribeToS3PresignedURLResponse(60LL * 2LL);
-    if (subscribeResult != AWS_OP_SUCCESS) {
-        return subscribeResult;     // TODO (MV): Is this the correct way, will start be tried again automatically?
-    }
+    subscribeToS3PresignedURLResponse();
 
-    dbusConnection = sdbus::createSessionBusConnection();
-    dbusConnection->requestName(DBUS_NAME);
-    dbusConnection->enterEventLoopAsync();
-
-    dbusManager = std::make_unique<ManagerAdaptor>(*dbusConnection, "/org/binsentry/CommercialBin");
-    auto s3UrlRequestHandler = [this](uint16_t requestId) -> int32_t {
-        return (int32_t)this->publishS3PresignedURLRequest(requestId, 300);
-    };
-    dbusS3PresignedURL = std::make_unique<S3PresignedURLAdaptor>(*dbusConnection, "/org/binsentry/CommercialBin/S3PresignedURL/SensorReadingHDF5", "hdf5", s3UrlRequestHandler);
-
-    if (dbusConnection == nullptr || dbusManager == nullptr || dbusS3PresignedURL == nullptr) {
-        // TODO (MV): delete any allocated parts
-        return AWS_OP_ERR;  // TODO (MV): Is this the correct way, will start be tried again automatically?
-    }
+    // FUTURE: Add mechanism to check D-Bus initialized correctly and if not try again
+    setupDBus();
 
     baseNotifier->onEvent(static_cast<Feature *>(this), ClientBaseEventNotification::FEATURE_STARTED);
     return AWS_OP_SUCCESS;
 }
 
-int S3PresignedURLFeature::stop()
-{
-    needStop.store(true);
+void S3PresignedURLFeature::setupDBus() {
+    std::lock_guard<std::mutex> lock(dbusLock);
 
-    auto onUnsubscribe = [](const MqttConnection &, uint16_t packetId, int errorCode) -> void {
-        LOGM_DEBUG(TAG, "Unsubscribing: PacketId:%u, ErrorCode:%d", packetId, errorCode);
+    dbusConnection = sdbus::createSessionBusConnection();
+    dbusConnection->requestName(DBUS_BUS_NAME);
+    dbusConnection->enterEventLoopAsync();
+
+    dbusManager = std::make_unique<ManagerAdaptor>(*dbusConnection, DBUS_PATH_BASE_NAME);
+    auto s3UrlRequestHandler = [this](uint16_t requestId) -> int32_t {
+        return (int32_t)this->publishS3PresignedURLRequest(requestId, 300);
     };
+    dbusS3PresignedURL = std::make_unique<S3PresignedURLAdaptor>(*dbusConnection, DBUS_PATH_NAME, "hdf5", s3UrlRequestHandler);
+
+    if (!isDBusSetup()) {
+        cleanupDBus();
+    }
+}
+
+void S3PresignedURLFeature::cleanupDBus() {
+    std::lock_guard<std::mutex> lock(dbusLock);
 
     if (dbusS3PresignedURL != nullptr) {
         dbusS3PresignedURL = nullptr;
@@ -285,10 +320,26 @@ int S3PresignedURLFeature::stop()
 
     if (dbusConnection != nullptr)
     {
-        dbusConnection->releaseName(DBUS_NAME);
+        dbusConnection->releaseName(DBUS_BUS_NAME);
         dbusConnection->leaveEventLoop();
         dbusConnection = nullptr;
     }
+}
+
+bool S3PresignedURLFeature::isDBusSetup() {
+    std::lock_guard<std::mutex> lock(dbusLock);
+    return (dbusConnection != nullptr && dbusManager != nullptr && dbusS3PresignedURL != nullptr);
+}
+
+int S3PresignedURLFeature::stop()
+{
+    needStop.store(true);
+
+    auto onUnsubscribe = [](const MqttConnection &, uint16_t packetId, int errorCode) -> void {
+        LOGM_DEBUG(TAG, "Unsubscribing: PacketId:%u, ErrorCode:%d", packetId, errorCode);
+    };
+
+    cleanupDBus();
 
     resourceManager->getConnection()->Unsubscribe(subTopic.c_str(), onUnsubscribe);
     baseNotifier->onEvent(static_cast<Feature *>(this), ClientBaseEventNotification::FEATURE_STOPPED);
