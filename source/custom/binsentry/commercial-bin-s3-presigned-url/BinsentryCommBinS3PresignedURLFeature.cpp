@@ -78,8 +78,13 @@ int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, 
     bool finished = false;
     int publishErrorCode = AWS_OP_ERR;
     auto onPublishComplete = [payload, &cvLambdaDone, &mtxLambdaDone, &finished, &publishErrorCode, this](const Mqtt::MqttConnection &, uint16_t packetId, int errorCode) mutable {
+        try {   // NOTE: std::system_error can occur when aws-iot-device-client is recovering from MQTT connection lost
+            std::lock_guard<std::mutex> lk(mtxLambdaDone);
+        } catch (std::system_error& e) {
+            return;
+        }
+
         LOGM_DEBUG(TAG, "PublishCompAck: Name:(%s), PacketId:(%hu), ErrorCode:%d", getName().c_str(), packetId, errorCode);
-        std::lock_guard<std::mutex> lk(mtxLambdaDone);
         finished = true;
         publishErrorCode = errorCode;
         cvLambdaDone.notify_all();
