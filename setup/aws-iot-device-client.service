@@ -2,6 +2,7 @@
 Description=AWS IoT Device Client
 Wants=network-online.target
 After=network.target network-online.target
+Requires=dbus.socket
 
 [Service]
 Environment="CONF_PATH=/etc/.aws-iot-device-client/aws-iot-device-client.conf"
