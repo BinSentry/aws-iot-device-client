@@ -300,8 +300,11 @@ int S3PresignedURLFeature::start()
 void S3PresignedURLFeature::setupDBus() {
     std::lock_guard<std::mutex> lock(dbusLock);
 
-    dbusConnection = sdbus::createSessionBusConnection();
+    LOGM_INFO(TAG, "Getting system D-Bus connection: %s", getName().c_str());
+    dbusConnection = sdbus::createSystemBusConnection();
+    LOGM_INFO(TAG, "Requesting ownership of bus name: '%s'", DBUS_BUS_NAME);
     dbusConnection->requestName(DBUS_BUS_NAME);
+    LOGM_INFO(TAG, "Starting system D-Bus event loop: %s", getName().c_str());
     dbusConnection->enterEventLoopAsync();
 
     dbusManager = std::make_unique<ManagerAdaptor>(*dbusConnection, DBUS_PATH_BASE_NAME);
