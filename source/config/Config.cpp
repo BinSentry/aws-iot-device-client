@@ -67,6 +67,8 @@ constexpr char PlainConfig::JSON_KEY_CONFIG_SHADOW[];
 constexpr char PlainConfig::JSON_KEY_SECURE_ELEMENT[];
 constexpr char PlainConfig::JSON_KEY_SENSOR_PUBLISH[];
 constexpr char PlainConfig::DEFAULT_LOCK_FILE_PATH[];
+constexpr char PlainConfig::JSON_KEY_CUSTOM[];
+constexpr char PlainConfig::JSON_KEY_BINSENTRY_S3_PRESIGNED_URL[];
 
 constexpr int Permissions::KEY_DIR;
 constexpr int Permissions::ROOT_CA_DIR;
@@ -240,6 +242,18 @@ bool PlainConfig::LoadFromJson(const Crt::JsonView &json)
         sensorPublish = temp;
     }
 
+    jsonKey = JSON_KEY_CUSTOM;
+    if (json.ValueExists(jsonKey))
+    {
+        const char *jsonKeyTwo = JSON_KEY_BINSENTRY_S3_PRESIGNED_URL;
+        if (json.GetJsonObject(jsonKey).ValueExists(jsonKeyTwo))
+        {
+            BinsentryCommBinS3PresignedURL temp;
+            temp.LoadFromJson(json.GetJsonObject(jsonKey).GetJsonObject(jsonKeyTwo));
+            binsentryCommBinS3PresignedUrl = temp;
+        }
+    }
+
     return true;
 }
 
@@ -409,7 +423,12 @@ bool PlainConfig::Validate() const
         return false;
     }
 #endif
-
+#if !defined(EXCLUDE_CUSTOM) || !defined(EXCLUDE_BINSENTRY_S3_PRESIGNED_URL) || !defined(DISABLE_MQTT)
+    if (!binsentryCommBinS3PresignedUrl.Validate())
+    {
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -487,6 +506,12 @@ void PlainConfig::SerializeToObject(Crt::JsonObject &object) const
         sensorPublish.SerializeToObject(sensorPublishObject);
         object.WithObject(JSON_KEY_SENSOR_PUBLISH, sensorPublishObject);
     }
+
+    Crt::JsonObject customObject;
+    Crt::JsonObject binsentryCommBinS3PresignedURLObject;
+    binsentryCommBinS3PresignedUrl.SerializeToObject(binsentryCommBinS3PresignedURLObject);
+    customObject.WithObject(JSON_KEY_BINSENTRY_S3_PRESIGNED_URL, binsentryCommBinS3PresignedURLObject);
+    object.WithObject(JSON_KEY_CUSTOM, customObject);
 }
 
 constexpr char PlainConfig::LogConfig::LOG_TYPE_FILE[];
@@ -2470,6 +2495,39 @@ void PlainConfig::SensorPublish::SerializeToObject(Crt::JsonObject &object) cons
     object.WithArray(JSON_SENSORS, sensors);
 }
 
+constexpr char PlainConfig::BinsentryCommBinS3PresignedURL::CLI_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL[];
+constexpr char PlainConfig::BinsentryCommBinS3PresignedURL::JSON_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL[];
+
+bool PlainConfig::BinsentryCommBinS3PresignedURL::LoadFromJson(const Crt::JsonView &json)
+{
+    const char *jsonKey = JSON_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL;
+    if (json.ValueExists(jsonKey))
+    {
+        enabled = json.GetBool(jsonKey);
+    }
+
+    return true;
+}
+
+bool PlainConfig::BinsentryCommBinS3PresignedURL::LoadFromCliArgs(const CliArgs &cliArgs)
+{
+    if (cliArgs.count(PlainConfig::BinsentryCommBinS3PresignedURL::CLI_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL))
+    {
+        enabled = cliArgs.at(CLI_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL).compare("true") == 0;
+    }
+    return true;
+}
+
+bool PlainConfig::BinsentryCommBinS3PresignedURL::Validate() const
+{
+    return true;
+}
+
+void PlainConfig::BinsentryCommBinS3PresignedURL::SerializeToObject(Crt::JsonObject &object) const
+{
+    object.WithBool(JSON_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL, enabled);
+}
+
 constexpr char Config::TAG[];
 constexpr char Config::DEFAULT_CONFIG_DIR[];
 constexpr char Config::DEFAULT_KEY_DIR[];
@@ -3067,6 +3125,11 @@ bool Config::ExportDefaultSetting(const string &file)
             "%s": "<replace>",
             "%s": replace
         ]
+    },
+    "%s": {
+        "%s": {
+            "%s": false
+        }
     }
 }
 )";
@@ -3141,7 +3204,10 @@ bool Config::ExportDefaultSetting(const string &file)
         PlainConfig::SensorPublish::JSON_MQTT_TOPIC,
         PlainConfig::SensorPublish::JSON_MQTT_DEAD_LETTER_TOPIC,
         PlainConfig::SensorPublish::JSON_MQTT_HEARTBEAT_TOPIC,
-        PlainConfig::SensorPublish::JSON_HEARTBEAT_TIME_SEC);
+        PlainConfig::SensorPublish::JSON_HEARTBEAT_TIME_SEC,
+        PlainConfig::JSON_KEY_CUSTOM,
+        PlainConfig::JSON_KEY_BINSENTRY_S3_PRESIGNED_URL,
+        PlainConfig::BinsentryCommBinS3PresignedURL::JSON_ENABLE_BINSENTRY_COMMBIN_S3PRESIGNED_URL);
 
     clientConfig.close();
     LOGM_INFO(TAG, "Exported settings to: %s", Sanitize(file).c_str());
