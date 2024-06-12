@@ -95,9 +95,9 @@ namespace Aws
                          */
                         std::string subTopic;
 
-                        static constexpr char DBUS_BUS_NAME[] = "org.binsentry.CommercialBin";
-                        static constexpr char DBUS_PATH_BASE_NAME[] = "/org/binsentry/CommercialBin";
-                        static constexpr char DBUS_PATH_NAME[] = "/org/binsentry/CommercialBin/S3PresignedURL/SensorReadingHDF5";
+                        static constexpr char DBUS_BUS_NAME[] = "com.binsentry.CommercialBin";
+                        static constexpr char DBUS_PATH_BASE_NAME[] = "/com/binsentry/CommercialBin";
+                        static constexpr char DBUS_PATH_NAME[] = "/com/binsentry/CommercialBin/S3PresignedURL/SensorReadingHDF5";
                         std::unique_ptr<sdbus::IConnection> dbusConnection = nullptr;
                         std::unique_ptr<ManagerAdaptor> dbusManager = nullptr;
                         std::unique_ptr<S3PresignedURLAdaptor> dbusS3PresignedURL = nullptr;
