@@ -13,7 +13,7 @@ namespace S3PresignedURL {
 class S3PresignedURL_adaptor
 {
 public:
-    static constexpr const char* INTERFACE_NAME = "org.binsentry.CommercialBin.S3PresignedURL.SensorReading";
+    static constexpr const char* INTERFACE_NAME = "com.binsentry.CommercialBin.S3PresignedURL.SensorReading";
 
 protected:
     S3PresignedURL_adaptor(sdbus::IObject& object)
