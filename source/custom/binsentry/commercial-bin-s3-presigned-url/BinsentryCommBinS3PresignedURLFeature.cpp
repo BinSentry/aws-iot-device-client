@@ -294,32 +294,39 @@ int S3PresignedURLFeature::start()
     setupDBus();
 
     baseNotifier->onEvent(static_cast<Feature *>(this), ClientBaseEventNotification::FEATURE_STARTED);
+    LOGM_DEBUG(TAG, "Start complete: %s", getName().c_str());
     return AWS_OP_SUCCESS;
 }
 
 void S3PresignedURLFeature::setupDBus() {
-    std::lock_guard<std::mutex> lock(dbusLock);
+    std::lock_guard<std::recursive_mutex> lock(dbusLock);
 
-    LOGM_INFO(TAG, "Getting system D-Bus connection: %s", getName().c_str());
+    LOGM_DEBUG(TAG, "Getting system D-Bus connection: %s", getName().c_str());
     dbusConnection = sdbus::createSystemBusConnection();
-    LOGM_INFO(TAG, "Requesting ownership of bus name: '%s'", DBUS_BUS_NAME);
+    LOGM_DEBUG(TAG, "Requesting ownership of bus name: '%s'", DBUS_BUS_NAME);
     dbusConnection->requestName(DBUS_BUS_NAME);
-    LOGM_INFO(TAG, "Starting system D-Bus event loop: %s", getName().c_str());
+    LOGM_DEBUG(TAG, "Starting system D-Bus event loop: %s", getName().c_str());
     dbusConnection->enterEventLoopAsync();
+    LOGM_DEBUG(TAG, "Finished starting system D-Bus event loop: %s", getName().c_str());
 
     dbusManager = std::make_unique<ManagerAdaptor>(*dbusConnection, DBUS_PATH_BASE_NAME);
+    LOGM_DEBUG(TAG, "D-Bus manager adapter created: %s", getName().c_str());
     auto s3UrlRequestHandler = [this](uint16_t requestId) -> int32_t {
         return (int32_t)this->publishS3PresignedURLRequest(requestId, 300);
     };
     dbusS3PresignedURL = std::make_unique<S3PresignedURLAdaptor>(*dbusConnection, DBUS_PATH_NAME, "hdf5", s3UrlRequestHandler);
+    LOGM_DEBUG(TAG, "D-Bus S3PresignedURLAdaptor created: %s", getName().c_str());
 
     if (!isDBusSetup()) {
+        LOGM_ERROR(TAG, "D-Bus setup failure, cleaning up: %s", getName().c_str());
         cleanupDBus();
+    } else {
+        LOGM_DEBUG(TAG, "D-Bus setup complete: %s", getName().c_str());
     }
 }
 
 void S3PresignedURLFeature::cleanupDBus() {
-    std::lock_guard<std::mutex> lock(dbusLock);
+    std::lock_guard<std::recursive_mutex> lock(dbusLock);
 
     if (dbusS3PresignedURL != nullptr) {
         dbusS3PresignedURL = nullptr;
@@ -338,7 +345,7 @@ void S3PresignedURLFeature::cleanupDBus() {
 }
 
 bool S3PresignedURLFeature::isDBusSetup() {
-    std::lock_guard<std::mutex> lock(dbusLock);
+    std::lock_guard<std::recursive_mutex> lock(dbusLock);
     return (dbusConnection != nullptr && dbusManager != nullptr && dbusS3PresignedURL != nullptr);
 }
 

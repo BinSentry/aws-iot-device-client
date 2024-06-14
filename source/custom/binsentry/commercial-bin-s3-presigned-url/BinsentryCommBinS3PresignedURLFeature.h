@@ -101,7 +101,7 @@ namespace Aws
                         std::unique_ptr<sdbus::IConnection> dbusConnection = nullptr;
                         std::unique_ptr<ManagerAdaptor> dbusManager = nullptr;
                         std::unique_ptr<S3PresignedURLAdaptor> dbusS3PresignedURL = nullptr;
-                        mutable std::mutex dbusLock;
+                        mutable std::recursive_mutex dbusLock;
 
                         void setupDBus();
                         void cleanupDBus();
