@@ -3,11 +3,13 @@ Description=AWS IoT Device Client
 Wants=network-online.target
 After=network.target network-online.target
 Requires=dbus.socket
+StartLimitIntervalSec=0 # disable rate limiting
 
 [Service]
 Environment="CONF_PATH=/etc/.aws-iot-device-client/aws-iot-device-client.conf"
 ExecStart=/sbin/aws-iot-device-client --config-file $CONF_PATH
 Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
