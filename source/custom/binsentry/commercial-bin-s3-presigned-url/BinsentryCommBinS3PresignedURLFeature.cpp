@@ -312,7 +312,7 @@ void S3PresignedURLFeature::setupDBus() {
     dbusManager = std::make_unique<ManagerAdaptor>(*dbusConnection, DBUS_PATH_BASE_NAME);
     LOGM_DEBUG(TAG, "D-Bus manager adapter created: %s", getName().c_str());
     auto s3UrlRequestHandler = [this](uint16_t requestId) -> int32_t {
-        return (int32_t)this->publishS3PresignedURLRequest(requestId, 300);
+        return (int32_t)this->publishS3PresignedURLRequest(requestId, 30000 /* ms */);
     };
     dbusS3PresignedURL = std::make_unique<S3PresignedURLAdaptor>(*dbusConnection, DBUS_PATH_NAME, "hdf5", s3UrlRequestHandler);
     LOGM_DEBUG(TAG, "D-Bus S3PresignedURLAdaptor created: %s", getName().c_str());
