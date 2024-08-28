@@ -57,6 +57,7 @@ int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, 
     if (!hasSubscribedToS3PresignedURLResponse) {
         subscribeToS3PresignedURLResponse();
         if (!hasSubscribedToS3PresignedURLResponse) {
+            LOGM_ERROR(TAG, "Publish aborted, no subscription to response topic: Name:(%s)", getName().c_str());
             return AWS_OP_ERR;
         }
     }
@@ -65,6 +66,7 @@ int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, 
     std::string jsonRequest = "{\"requestId\": " + std::to_string(requestId) + "}";
     int payloadInitResult = aws_byte_buf_init(&payload, resourceManager->getAllocator(), jsonRequest.length());
     if (payloadInitResult != AWS_OP_SUCCESS) {
+        LOGM_ERROR(TAG, "Publish aborted for requestID %u, buffer init failure", requestId);
         return payloadInitResult;
     }
 
@@ -98,6 +100,12 @@ int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, 
     unique_lock<mutex> lk(mtxLambdaDone);
     if (cvLambdaDone.wait_for(lk, std::chrono::milliseconds(timeout_ms), [&]{return finished;})) {
         aws_byte_buf_clean_up_secure(&payload);
+        if (finished) {
+            LOGM_INFO(TAG, "Published finished with error code: %u", publishErrorCode);
+        } else {
+            LOGM_ERROR(TAG, "Publish finish error, error code: %u", publishErrorCode);
+        }
+
         return publishErrorCode;
     } else {
         LOGM_ERROR(TAG, "PublishCompAck timeout: Name:(%s)", getName().c_str());
@@ -163,6 +171,8 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
             int jsonRequestId = jsonView.GetInteger(jsonKey);
             if (jsonRequestId > 0 && jsonRequestId <= UINT16_MAX) {
                 requestId = (uint16_t)jsonRequestId;
+            } else {
+                LOGM_WARN(TAG, "SubReceive JSON request ID (%d) out of valid range", jsonRequestId);
             }
         }
 
@@ -201,7 +211,14 @@ void S3PresignedURLFeature::onSubscribeReceiveS3PresignedURLResponse(const MqttC
             }
 
             if (requestIDExists && presignedPutUrlExists) {
+                LOGM_DEBUG(TAG, "SubReceive success with request ID: %hu", requestId);
                 returnCode = 0;
+            } else if (requestIDExists) {
+                LOGM_ERROR(TAG, "SubReceive error with request ID: %hu, missing PUT URL, return code: %d", requestId, returnCode);
+            } else if (presignedPutUrlExists) {
+                LOGM_ERROR(TAG, "SubReceive error, missing request ID, PUT URL present, return code: %d", returnCode);
+            } else {
+                LOGM_ERROR(TAG, "SubReceive error, missing request ID and PUT URL, return code: %d", returnCode);
             }
         }
     } else {
