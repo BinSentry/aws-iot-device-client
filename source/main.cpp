@@ -194,7 +194,7 @@ void attemptConnection()
     try
     {
         Retry::ExponentialRetryConfig retryConfig = {10 * 1000, 900 * 1000, -1, nullptr};
-        auto publishLambda = []() -> bool {
+        auto publishLambda = []() -> Retry::RetryResult_t {
             int connectionStatus = resourceManager.get()->establishConnection(config.config);
             if (SharedCrtResourceManager::ABORT == connectionStatus)
             {
@@ -206,19 +206,23 @@ void attemptConnection()
                     DC_FATAL_ERROR);
                 deviceClientAbort(
                     "Failed to establish MQTT connection due to credential/configuration error", EXIT_FAILURE);
-                return true;
+                return Retry::RetryResult_t::RETRY_RESULT_FAILURE_ABORT;
             }
             else if (SharedCrtResourceManager::SUCCESS == connectionStatus)
             {
-                return true;
+                return Retry::RetryResult_t::RETRY_RESULT_SUCCESS;
+            }
+            else if (SharedCrtResourceManager::RETRY_NO_BACKOFF == connectionStatus)
+            {
+                return Retry::RetryResult_t::RETRY_RESULT_FAILURE_NO_BACKOFF;
             }
             else
             {
-                return false;
+                return Retry::RetryResult_t::RETRY_RESULT_FAILURE_APPLY_BACKOFF;
             }
         };
         std::thread attemptConnectionThread(
-            [retryConfig, publishLambda] { Retry::exponentialBackoff(retryConfig, publishLambda); });
+            [retryConfig, publishLambda] { Retry::conditionalExponentialBackoff(retryConfig, publishLambda); });
         attemptConnectionThread.join();
     }
     catch (const std::exception &e)

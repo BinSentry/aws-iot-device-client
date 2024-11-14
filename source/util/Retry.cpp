@@ -72,3 +72,73 @@ bool Retry::exponentialBackoff(
 
     return successful;
 }
+
+bool Retry::conditionalExponentialBackoff(
+    const ExponentialRetryConfig &config,
+    const function<RetryResult_t()> &retryableFunction,
+    const function<void()> &onComplete)
+{
+    bool needToStop = false;
+    if (config.needStopFlag != nullptr)
+    {
+        needToStop = config.needStopFlag->load();
+    }
+
+    if (needToStop)
+    {
+        LOG_DEBUG(TAG, "Stop flag was set prior to executing retryable function, will not attempt retryable execution");
+
+        if (nullptr != onComplete)
+        {
+            onComplete();
+        }
+
+        return false;
+    }
+
+    if (config.maxRetries < 0)
+    {
+        LOG_DEBUG(TAG, "Retryable function starting, it will retry until success");
+    }
+
+    RetryResult_t retryResult = RETRY_RESULT_FAILURE_ABORT;
+    long backoffMillis = config.startingBackoffMillis;
+    long retriesSoFar = 0;
+    while (RETRY_RESULT_SUCCESS != retryResult && !needToStop && (config.maxRetries < 0 || retriesSoFar < config.maxRetries))
+    {
+        retryResult = retryableFunction();
+
+        // So we don't have to worry about overflowing on an infinite number of retries
+        if (config.maxRetries >= 0)
+        {
+            retriesSoFar++;
+        }
+
+        if (RETRY_RESULT_SUCCESS != retryResult && (config.maxRetries < 0 || retriesSoFar < config.maxRetries))
+        {
+            LOGM_DEBUG(TAG, "Retryable function returned unsuccessfully, sleeping for %ld milliseconds", backoffMillis);
+            this_thread::sleep_for(std::chrono::milliseconds(backoffMillis));
+            if (RETRY_RESULT_FAILURE_APPLY_BACKOFF == retryResult)
+            {
+                backoffMillis = backoffMillis * 2 > config.maxBackoffMillis ? config.maxBackoffMillis : backoffMillis * 2;
+            }
+        }
+
+        if (config.needStopFlag != nullptr)
+        {
+            needToStop = config.needStopFlag->load();
+        }
+
+        if (RETRY_RESULT_FAILURE_ABORT == retryResult)
+        {
+            needToStop = true;
+        }
+    }
+
+    if (nullptr != onComplete)
+    {
+        onComplete();
+    }
+
+    return (RETRY_RESULT_SUCCESS == retryResult);
+}

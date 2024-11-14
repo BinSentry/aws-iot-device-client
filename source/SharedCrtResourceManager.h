@@ -77,6 +77,7 @@ namespace Aws
                 static const int SUCCESS = 0;
                 static const int RETRY = 1;
                 static const int ABORT = 2;
+                static const int RETRY_NO_BACKOFF = 3;
 
                 bool initialize(const PlainConfig &config, std::shared_ptr<Util::FeatureRegistry> featureRegistry);
 
