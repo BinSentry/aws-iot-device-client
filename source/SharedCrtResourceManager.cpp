@@ -461,9 +461,18 @@ int SharedCrtResourceManager::establishConnection(const PlainConfig &config)
         LOG_ERROR(TAG, "Device Client is not able to set reconnection settings. Device Client will retry again.");
         return RETRY;
     }
-    if (!connection->Connect(config.thingName->c_str(), false))
+    // TODO (MV): ProtocolOperationTimeoutMs (default: effectively never)
+    // NOTE: keepAliveTimeSec default: 20min - too long, pingTimeoutMs default: 3 sec - too short
+    // FUTURE: Move keepAliveTimeSec and pingTimeoutMs into config
+    if (!connection->Connect(config.thingName->c_str(), false, 8 * 60, 15 * 1000))
     {
-        LOGM_ERROR(TAG, "MQTT Connection failed with error: %s", ErrorDebugString(connection->LastError()));
+        const int lastError = connection->LastError();
+        LOGM_ERROR(TAG, "MQTT Connection failed with error: %s", ErrorDebugString(lastError));
+        if (AWS_IO_DNS_QUERY_FAILED == lastError)
+        {
+            return RETRY_NO_BACKOFF;
+        }
+
         return RETRY;
     }
 
@@ -477,6 +486,11 @@ int SharedCrtResourceManager::establishConnection(const PlainConfig &config)
     else
     {
         LOG_ERROR(TAG, "Failed to establish shared MQTT connection, but will attempt retry...");
+        if (AWS_IO_DNS_QUERY_FAILED == connectionStatus)
+        {
+            return SharedCrtResourceManager::RETRY_NO_BACKOFF;
+        }
+
         return SharedCrtResourceManager::RETRY;
     }
 }

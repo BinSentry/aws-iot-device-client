@@ -26,6 +26,13 @@ namespace Aws
                     static const char *TAG;
 
                   public:
+                    typedef enum RetryResult
+                    {
+                        RETRY_RESULT_SUCCESS = 0,
+                        RETRY_RESULT_FAILURE_APPLY_BACKOFF,
+                        RETRY_RESULT_FAILURE_NO_BACKOFF,
+                        RETRY_RESULT_FAILURE_ABORT,
+                    } RetryResult_t;
                     /**
                      * \brief Used for passing an exponential retry configuration to the exponentialBackoff function
                      */
@@ -66,6 +73,25 @@ namespace Aws
                     static bool exponentialBackoff(
                         const ExponentialRetryConfig &config,
                         const std::function<bool()> &retryableFunction,
+                        const std::function<void()> &onComplete = nullptr);
+                    /**
+                       * \brief Performs an exponential backoff of the provided function based on the specified
+                       * ExponentialRetryConfig and the retryable functions retry result
+                       *
+                       * In the event of throttling by IoT Core APIs, such as when we perform UpdateJobExecution
+                       * within the Jobs feature, it is necessary to perform an exponential backoff to improve the
+                       * chances of receiving a success response.
+                       * @param config the ExponentialRetryConfig specifying whether the function should be retried
+                       * @param retryableFunction the function to retry. This function should return a RetryResult_t
+                       * indicating whether it is successful or not (and whether to backoff or abort), since this
+                       * indicator is what will determine whether the function is retried or not.
+                       * @param onComplete a callback function which will be executed once this function is finished
+                       * attempting retries
+                       * @return a bool representing whether the retryableFunction was successful or not
+                       */
+                    static bool conditionalExponentialBackoff(
+                        const ExponentialRetryConfig &config,
+                        const std::function<RetryResult_t()> &retryableFunction,
                         const std::function<void()> &onComplete = nullptr);
                 };
             } // namespace Util
