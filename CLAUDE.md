@@ -1,0 +1,2 @@
+- build and run the tests using cmake target test-aws-iot-device-client
+- whenever making any code or test changes, always verify by running relevant tests
