@@ -89,8 +89,9 @@ int S3PresignedURLFeature::publishS3PresignedURLRequest(unsigned int requestId, 
         publishErrorCode = errorCode;
         cvLambdaDone.notify_all();
     };
+    // Only attempt once.  It's up to the caller to try again after a timeout.
     uint16_t publishPacketId = resourceManager->getConnection()->Publish(
-        pubTopic.c_str(), AWS_MQTT_QOS_AT_LEAST_ONCE, false, payload, onPublishComplete);
+        pubTopic.c_str(), AWS_MQTT_QOS_AT_MOST_ONCE, false, payload, onPublishComplete);
     if (publishPacketId == 0) {
         LOGM_ERROR(TAG, "Publish failed synchronously: Name:(%s)", getName().c_str());
         aws_byte_buf_clean_up_secure(&payload);
