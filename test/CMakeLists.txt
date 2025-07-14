@@ -60,6 +60,13 @@ if (NOT EXCLUDE_SENSOR_PUBLISH)
     list(APPEND DC_SRC ${SENSOR_PUBLISH_SRC})
 endif ()
 
+if (NOT EXCLUDE_CUSTOM)
+    if (NOT EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
+        file(GLOB COMM_BIN_S3_PRESIGNED_URL_SRC "../source/custom/binsentry/commercial-bin-s3-presigned-url/*.cpp")
+        list(APPEND DC_SRC ${COMM_BIN_S3_PRESIGNED_URL_SRC})
+    endif ()
+endif ()
+
 #########################################
 # Test Files                            #
 #########################################
@@ -109,6 +116,13 @@ if (NOT EXCLUDE_SENSOR_PUBLISH)
     list(APPEND DC_TST ${SENSOR_PUBLISH_TST})
 endif ()
 
+if (NOT EXCLUDE_CUSTOM)
+    if (NOT EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
+        file(GLOB COMM_BIN_S3_PRESIGNED_URL_TST "./custom/binsentry/*.cpp")
+        list(APPEND DC_TST ${COMM_BIN_S3_PRESIGNED_URL_TST})
+    endif ()
+endif ()
+
 list(APPEND DC_SRC ${DC_TST})
 list(FILTER DC_SRC EXCLUDE REGEX ".*main.cpp$")
 
@@ -125,6 +139,12 @@ target_link_libraries(${GTEST_PROJECT} gmock gmock_main)
 target_link_libraries(${GTEST_PROJECT} ${DEP_DC_LIBS})
 target_link_libraries(${GTEST_PROJECT} OpenSSL::SSL)
 target_link_libraries(${GTEST_PROJECT} OpenSSL::Crypto)
+
+if (NOT EXCLUDE_CUSTOM)
+    if (NOT EXCLUDE_BINSENTRY_COMM_BIN_S3_PRESIGNED_URL)
+        target_link_libraries(${GTEST_PROJECT} SDBusCpp::sdbus-c++)
+    endif ()
+endif ()
 
 if (LINK_DL)
     target_link_libraries(${GTEST_PROJECT} dl)
