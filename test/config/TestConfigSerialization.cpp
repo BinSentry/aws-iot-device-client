@@ -115,6 +115,9 @@ TEST(SerializeConfigTestFixture, SerializeCompleteConfigTest)
                 "heartbeat_time_sec": 10
             }
         ]
+    },
+    "custom": {
+        "binsentry-s3-presigned-url": {"enabled": true }
     }
 })";
     // Initializing allocator, so we can use CJSON lib from SDK in our unit tests.
@@ -175,6 +178,9 @@ TEST(SerializeConfigTestFixture, SerializeBasicConfigTest)
     },
     "secure-element": {
         "enabled": true
+    },
+    "custom": {
+        "binsentry-s3-presigned-url": {"enabled": true }
     }
 })";
     // Initializing allocator, so we can use CJSON lib from SDK in our unit tests.
