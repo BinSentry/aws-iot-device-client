@@ -78,12 +78,31 @@ namespace Aws
                 static constexpr char CLI_KEY[] = "--key";
                 static constexpr char CLI_ROOT_CA[] = "--root-ca";
                 static constexpr char CLI_THING_NAME[] = "--thing-name";
+                static constexpr char CLI_MQTT_KEEP_ALIVE_SEC[] = "--mqtt-keep-alive-sec";
+                static constexpr char CLI_MQTT_PING_TIMEOUT_MS[] = "--mqtt-ping-timeout-ms";
+                static constexpr char CLI_MQTT_CONNECT_TIMEOUT_MS[] = "--mqtt-connect-timeout-ms";
+                static constexpr char CLI_MQTT_MAX_BACKOFF_SEC[] = "--mqtt-max-backoff-sec";
 
                 static constexpr char JSON_KEY_ENDPOINT[] = "endpoint";
                 static constexpr char JSON_KEY_CERT[] = "cert";
                 static constexpr char JSON_KEY_KEY[] = "key";
                 static constexpr char JSON_KEY_ROOT_CA[] = "root-ca";
                 static constexpr char JSON_KEY_THING_NAME[] = "thing-name";
+                static constexpr char JSON_KEY_MQTT_KEEP_ALIVE_SEC[] = "mqtt-keep-alive-sec";
+                static constexpr char JSON_KEY_MQTT_PING_TIMEOUT_MS[] = "mqtt-ping-timeout-ms";
+                static constexpr char JSON_KEY_MQTT_CONNECT_TIMEOUT_MS[] = "mqtt-connect-timeout-ms";
+                static constexpr char JSON_KEY_MQTT_MAX_BACKOFF_SEC[] = "mqtt-max-backoff-sec";
+
+                // The SDK defaults (20 min keep-alive, 3 s ping timeout, 3 s TCP connect timeout) are tuned for fast
+                // networks, not LTE-M where a TCP connect alone can take several seconds.
+                static constexpr uint16_t DEFAULT_MQTT_KEEP_ALIVE_SEC = 8 * 60;
+                static constexpr uint32_t DEFAULT_MQTT_PING_TIMEOUT_MS = 15 * 1000;
+                static constexpr uint32_t DEFAULT_MQTT_CONNECT_TIMEOUT_MS = 30 * 1000;
+                // Caps both the initial connection retries and the SDK's reconnects after a dropped connection. Once
+                // a weak link starts failing attempts, a long cap mostly delays the retry that would have succeeded.
+                static constexpr uint16_t DEFAULT_MQTT_MAX_BACKOFF_SEC = 4 * 60;
+                // The SDK's reconnect backoff starts at this value, so the cap can't go below it.
+                static constexpr uint16_t MIN_MQTT_BACKOFF_SEC = 15;
                 static constexpr char JSON_KEY_JOBS[] = "jobs";
                 static constexpr char JSON_KEY_TUNNELING[] = "tunneling";
                 static constexpr char JSON_KEY_DEVICE_DEFENDER[] = "device-defender";
@@ -110,6 +129,10 @@ namespace Aws
                 Aws::Crt::Optional<std::string> key;
                 Aws::Crt::Optional<std::string> rootCa;
                 Aws::Crt::Optional<std::string> thingName;
+                uint16_t mqttKeepAliveSec{DEFAULT_MQTT_KEEP_ALIVE_SEC};
+                uint32_t mqttPingTimeoutMs{DEFAULT_MQTT_PING_TIMEOUT_MS};
+                uint32_t mqttConnectTimeoutMs{DEFAULT_MQTT_CONNECT_TIMEOUT_MS};
+                uint16_t mqttMaxBackoffSec{DEFAULT_MQTT_MAX_BACKOFF_SEC};
 
                 std::string lockFilePath{DEFAULT_LOCK_FILE_PATH};
 

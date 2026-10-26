@@ -193,7 +193,7 @@ void attemptConnection()
 {
     try
     {
-        Retry::ExponentialRetryConfig retryConfig = {10 * 1000, 900 * 1000, -1, nullptr};
+        Retry::ExponentialRetryConfig retryConfig = {10 * 1000, config.config.mqttMaxBackoffSec * 1000L, -1, nullptr};
         auto publishLambda = []() -> Retry::RetryResult_t {
             int connectionStatus = resourceManager.get()->establishConnection(config.config);
             if (SharedCrtResourceManager::ABORT == connectionStatus)

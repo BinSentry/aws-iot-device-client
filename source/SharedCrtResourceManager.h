@@ -74,6 +74,12 @@ namespace Aws
                  */
                 static constexpr char DEFAULT_SDK_LOG_FILE[] = "/var/log/aws-iot-device-client/sdk.log";
 
+                /**
+                 * \brief SDK log file value that writes SDK logs to stderr instead of a file, so that they land in the
+                 * journal when running under systemd.
+                 */
+                static constexpr char SDK_LOG_FILE_STDERR[] = "stderr";
+
                 static const int SUCCESS = 0;
                 static const int RETRY = 1;
                 static const int ABORT = 2;

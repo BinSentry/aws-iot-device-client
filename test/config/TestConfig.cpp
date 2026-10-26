@@ -1684,3 +1684,92 @@ TEST_F(ConfigTestFixture, HTTPProxyConfigNoAuth)
     ASSERT_FALSE(httpProxyConfig.httpProxyAuthEnabled);
     ASSERT_STREQ("None", httpProxyConfig.proxyAuthMethod->c_str());
 }
+
+TEST_F(ConfigTestFixture, MqttTimeoutsDefaults)
+{
+    PlainConfig config;
+    config.LoadFromCliArgs(CliArgs{});
+
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC, config.mqttKeepAliveSec);
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS, config.mqttPingTimeoutMs);
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_CONNECT_TIMEOUT_MS, config.mqttConnectTimeoutMs);
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_MAX_BACKOFF_SEC, config.mqttMaxBackoffSec);
+}
+
+TEST_F(ConfigTestFixture, MqttTimeoutsJson)
+{
+    constexpr char jsonString[] = R"(
+{
+    "mqtt-keep-alive-sec": 300,
+    "mqtt-ping-timeout-ms": 60000,
+    "mqtt-connect-timeout-ms": 20000,
+    "mqtt-max-backoff-sec": 60
+})";
+    JsonObject jsonObject(jsonString);
+    PlainConfig config;
+    config.LoadFromJson(jsonObject.View());
+
+    ASSERT_EQ(300, config.mqttKeepAliveSec);
+    ASSERT_EQ(60000u, config.mqttPingTimeoutMs);
+    ASSERT_EQ(20000u, config.mqttConnectTimeoutMs);
+    ASSERT_EQ(60, config.mqttMaxBackoffSec);
+}
+
+TEST_F(ConfigTestFixture, MqttMaxBackoffBelowMinimumKeepsDefault)
+{
+    CliArgs cliArgs;
+    cliArgs[PlainConfig::CLI_MQTT_MAX_BACKOFF_SEC] = "10";
+
+    PlainConfig config;
+    config.LoadFromCliArgs(cliArgs);
+
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_MAX_BACKOFF_SEC, config.mqttMaxBackoffSec);
+}
+
+TEST_F(ConfigTestFixture, MqttTimeoutsJsonInvalidValuesKeepDefaults)
+{
+    constexpr char jsonString[] = R"(
+{
+    "mqtt-keep-alive-sec": 70000,
+    "mqtt-ping-timeout-ms": "60000"
+})";
+    JsonObject jsonObject(jsonString);
+    PlainConfig config;
+    config.LoadFromJson(jsonObject.View());
+
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC, config.mqttKeepAliveSec);
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS, config.mqttPingTimeoutMs);
+}
+
+TEST_F(ConfigTestFixture, MqttTimeoutsCliOverridesJson)
+{
+    constexpr char jsonString[] = R"(
+{
+    "mqtt-keep-alive-sec": 300,
+    "mqtt-ping-timeout-ms": 60000
+})";
+    JsonObject jsonObject(jsonString);
+    CliArgs cliArgs;
+    cliArgs[PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC] = "600";
+    cliArgs[PlainConfig::CLI_MQTT_PING_TIMEOUT_MS] = "30000";
+
+    PlainConfig config;
+    config.LoadFromJson(jsonObject.View());
+    config.LoadFromCliArgs(cliArgs);
+
+    ASSERT_EQ(600, config.mqttKeepAliveSec);
+    ASSERT_EQ(30000u, config.mqttPingTimeoutMs);
+}
+
+TEST_F(ConfigTestFixture, MqttTimeoutsCliInvalidValuesKeepDefaults)
+{
+    CliArgs cliArgs;
+    cliArgs[PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC] = "0";
+    cliArgs[PlainConfig::CLI_MQTT_PING_TIMEOUT_MS] = "abc";
+
+    PlainConfig config;
+    config.LoadFromCliArgs(cliArgs);
+
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC, config.mqttKeepAliveSec);
+    ASSERT_EQ(PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS, config.mqttPingTimeoutMs);
+}

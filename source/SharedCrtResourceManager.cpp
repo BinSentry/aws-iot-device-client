@@ -25,6 +25,7 @@ using namespace Aws::Iot::DeviceClient::Logging;
 
 constexpr int SharedCrtResourceManager::DEFAULT_WAIT_TIME_SECONDS;
 constexpr char SharedCrtResourceManager::DEFAULT_SDK_LOG_FILE[];
+constexpr char SharedCrtResourceManager::SDK_LOG_FILE_STDERR[];
 
 SharedCrtResourceManager::~SharedCrtResourceManager()
 {
@@ -131,6 +132,13 @@ bool SharedCrtResourceManager::locateCredentials(const PlainConfig &config) cons
 
 bool SharedCrtResourceManager::setupLogging(const PlainConfig &config) const
 {
+    if (config.logConfig.sdkLogFile == SDK_LOG_FILE_STDERR)
+    {
+        apiHandle->InitializeLogging(config.logConfig.sdkLogLevel, stderr);
+        LOG_INFO(TAG, "SDK logging is enabled. Writing SDK logs to stderr.");
+        return true;
+    }
+
     // Absolute path to the sdk log file.
     std::string logFilePath{DEFAULT_SDK_LOG_FILE};
     if (!config.logConfig.sdkLogFile.empty())
@@ -332,6 +340,7 @@ int SharedCrtResourceManager::establishConnection(const PlainConfig &config)
     }
     clientConfigBuilder.WithSdkName(SharedCrtResourceManager::BINARY_NAME);
     clientConfigBuilder.WithSdkVersion(DEVICE_CLIENT_VERSION);
+    clientConfigBuilder.WithTcpConnectTimeout(config.mqttConnectTimeoutMs);
 
     PlainConfig::HttpProxyConfig proxyConfig = config.httpProxyConfig;
     Aws::Crt::Http::HttpClientConnectionProxyOptions proxyOptions;
@@ -456,15 +465,35 @@ int SharedCrtResourceManager::establishConnection(const PlainConfig &config)
     connection->OnConnectionResumed = move(OnConnectionResumed);
 
     LOGM_INFO(TAG, "Establishing MQTT connection with client id %s...", config.thingName->c_str());
-    if (!connection->SetReconnectTimeout(15, 240))
+    if (!connection->SetReconnectTimeout(PlainConfig::MIN_MQTT_BACKOFF_SEC, config.mqttMaxBackoffSec))
     {
         LOG_ERROR(TAG, "Device Client is not able to set reconnection settings. Device Client will retry again.");
         return RETRY;
     }
+    uint16_t keepAliveSec = config.mqttKeepAliveSec;
+    uint32_t pingTimeoutMs = config.mqttPingTimeoutMs;
+    // The SDK fatally asserts unless the keep-alive is longer than the ping timeout.
+    if (static_cast<uint64_t>(keepAliveSec) * 1000 <= pingTimeoutMs)
+    {
+        LOGM_WARN(
+            TAG,
+            "MQTT keep-alive (%u sec) must be longer than the ping timeout (%u ms), using defaults of %u sec and %u ms",
+            keepAliveSec,
+            pingTimeoutMs,
+            PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC,
+            PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS);
+        keepAliveSec = PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC;
+        pingTimeoutMs = PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS;
+    }
+    LOGM_INFO(
+        TAG,
+        "MQTT keep-alive: %u sec, ping timeout: %u ms, connect timeout: %u ms, max backoff: %u sec",
+        keepAliveSec,
+        pingTimeoutMs,
+        config.mqttConnectTimeoutMs,
+        config.mqttMaxBackoffSec);
     // TODO (MV): ProtocolOperationTimeoutMs (default: effectively never)
-    // NOTE: keepAliveTimeSec default: 20min - too long, pingTimeoutMs default: 3 sec - too short
-    // FUTURE: Move keepAliveTimeSec and pingTimeoutMs into config
-    if (!connection->Connect(config.thingName->c_str(), false, 8 * 60, 15 * 1000))
+    if (!connection->Connect(config.thingName->c_str(), false, keepAliveSec, pingTimeoutMs))
     {
         const int lastError = connection->LastError();
         LOGM_ERROR(TAG, "MQTT Connection failed with error: %s", ErrorDebugString(lastError));
