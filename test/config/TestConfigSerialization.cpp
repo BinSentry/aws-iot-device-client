@@ -29,6 +29,10 @@ TEST(SerializeConfigTestFixture, SerializeCompleteConfigTest)
     "cert": "/tmp/aws-iot-device-client-test-file",
     "key": "/tmp/aws-iot-device-client-test-file",
     "thing-name": "thing-name value",
+    "mqtt-keep-alive-sec": 300,
+    "mqtt-ping-timeout-ms": 60000,
+    "mqtt-connect-timeout-ms": 20000,
+    "mqtt-max-backoff-sec": 60,
     "logging": {
         "level": "INFO",
         "type": "file",
@@ -140,6 +144,10 @@ TEST(SerializeConfigTestFixture, SerializeBasicConfigTest)
 {
     constexpr char jsonString[] = R"(
 {
+    "mqtt-keep-alive-sec": 480,
+    "mqtt-ping-timeout-ms": 15000,
+    "mqtt-connect-timeout-ms": 30000,
+    "mqtt-max-backoff-sec": 120,
     "logging": {
         "level": "DEBUG",
         "type": "file",

@@ -29,6 +29,7 @@
 #include <aws/io/socket.h>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <regex>
 #include <stdexcept>
@@ -49,11 +50,24 @@ constexpr char PlainConfig::CLI_CERT[];
 constexpr char PlainConfig::CLI_KEY[];
 constexpr char PlainConfig::CLI_ROOT_CA[];
 constexpr char PlainConfig::CLI_THING_NAME[];
+constexpr char PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC[];
+constexpr char PlainConfig::CLI_MQTT_PING_TIMEOUT_MS[];
+constexpr char PlainConfig::CLI_MQTT_CONNECT_TIMEOUT_MS[];
+constexpr char PlainConfig::CLI_MQTT_MAX_BACKOFF_SEC[];
 constexpr char PlainConfig::JSON_KEY_ENDPOINT[];
 constexpr char PlainConfig::JSON_KEY_CERT[];
 constexpr char PlainConfig::JSON_KEY_KEY[];
 constexpr char PlainConfig::JSON_KEY_ROOT_CA[];
 constexpr char PlainConfig::JSON_KEY_THING_NAME[];
+constexpr char PlainConfig::JSON_KEY_MQTT_KEEP_ALIVE_SEC[];
+constexpr char PlainConfig::JSON_KEY_MQTT_PING_TIMEOUT_MS[];
+constexpr uint16_t PlainConfig::DEFAULT_MQTT_KEEP_ALIVE_SEC;
+constexpr uint32_t PlainConfig::DEFAULT_MQTT_PING_TIMEOUT_MS;
+constexpr char PlainConfig::JSON_KEY_MQTT_CONNECT_TIMEOUT_MS[];
+constexpr char PlainConfig::JSON_KEY_MQTT_MAX_BACKOFF_SEC[];
+constexpr uint32_t PlainConfig::DEFAULT_MQTT_CONNECT_TIMEOUT_MS;
+constexpr uint16_t PlainConfig::DEFAULT_MQTT_MAX_BACKOFF_SEC;
+constexpr uint16_t PlainConfig::MIN_MQTT_BACKOFF_SEC;
 constexpr char PlainConfig::JSON_KEY_LOGGING[];
 constexpr char PlainConfig::JSON_KEY_JOBS[];
 constexpr char PlainConfig::JSON_KEY_TUNNELING[];
@@ -85,6 +99,61 @@ constexpr int Permissions::JOB_HANDLER;
 constexpr int Permissions::PUB_SUB_FILES;
 constexpr int Permissions::SAMPLE_SHADOW_FILES;
 constexpr int Permissions::PKCS11_LIB_FILE;
+
+namespace
+{
+    /**
+     * Out of range values are ignored with a warning rather than failing validation, so that a bad value can't stop
+     * the Device Client from connecting, which would also cut off the remote access needed to fix it.
+     */
+    template <typename T> void LoadMqttSetting(const char *name, int64_t value, T &target, int64_t min)
+    {
+        if (value < min || value > std::numeric_limits<T>::max())
+        {
+            LOGM_WARN(
+                Config::TAG,
+                "Ignoring {%s} value %lld, it must be between %lld and %lld",
+                name,
+                static_cast<long long>(value),
+                static_cast<long long>(min),
+                static_cast<long long>(std::numeric_limits<T>::max()));
+            return;
+        }
+        target = static_cast<T>(value);
+    }
+
+    template <typename T>
+    void LoadMqttSettingFromJson(const Aws::Crt::JsonView &json, const char *jsonKey, T &target, int64_t min = 1)
+    {
+        if (!json.ValueExists(jsonKey))
+        {
+            return;
+        }
+        if (!json.GetJsonObject(jsonKey).IsIntegerType())
+        {
+            LOGM_WARN(Config::TAG, "Ignoring {%s}, it must be an integer", jsonKey);
+            return;
+        }
+        LoadMqttSetting(jsonKey, json.GetInt64(jsonKey), target, min);
+    }
+
+    template <typename T>
+    void LoadMqttSettingFromCli(const CliArgs &cliArgs, const char *cliArg, T &target, int64_t min = 1)
+    {
+        if (!cliArgs.count(cliArg))
+        {
+            return;
+        }
+        try
+        {
+            LoadMqttSetting(cliArg, stoll(cliArgs.at(cliArg)), target, min);
+        }
+        catch (const std::exception &)
+        {
+            LOGM_WARN(Config::TAG, "Ignoring {%s}, it must be an integer", cliArg);
+        }
+    }
+} // namespace
 
 bool PlainConfig::LoadFromJson(const Crt::JsonView &json)
 {
@@ -149,6 +218,11 @@ bool PlainConfig::LoadFromJson(const Crt::JsonView &json)
     {
         thingName = json.GetString(jsonKey).c_str();
     }
+
+    LoadMqttSettingFromJson(json, JSON_KEY_MQTT_KEEP_ALIVE_SEC, mqttKeepAliveSec);
+    LoadMqttSettingFromJson(json, JSON_KEY_MQTT_PING_TIMEOUT_MS, mqttPingTimeoutMs);
+    LoadMqttSettingFromJson(json, JSON_KEY_MQTT_CONNECT_TIMEOUT_MS, mqttConnectTimeoutMs);
+    LoadMqttSettingFromJson(json, JSON_KEY_MQTT_MAX_BACKOFF_SEC, mqttMaxBackoffSec, MIN_MQTT_BACKOFF_SEC);
 
     jsonKey = JSON_KEY_JOBS;
     if (json.ValueExists(jsonKey))
@@ -290,6 +364,10 @@ bool PlainConfig::LoadFromCliArgs(const CliArgs &cliArgs)
     {
         thingName = cliArgs.at(PlainConfig::CLI_THING_NAME).c_str();
     }
+    LoadMqttSettingFromCli(cliArgs, PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC, mqttKeepAliveSec);
+    LoadMqttSettingFromCli(cliArgs, PlainConfig::CLI_MQTT_PING_TIMEOUT_MS, mqttPingTimeoutMs);
+    LoadMqttSettingFromCli(cliArgs, PlainConfig::CLI_MQTT_CONNECT_TIMEOUT_MS, mqttConnectTimeoutMs);
+    LoadMqttSettingFromCli(cliArgs, PlainConfig::CLI_MQTT_MAX_BACKOFF_SEC, mqttMaxBackoffSec, MIN_MQTT_BACKOFF_SEC);
 
     bool loadFeatureCliArgs = tunneling.LoadFromCliArgs(cliArgs) && logConfig.LoadFromCliArgs(cliArgs) && httpProxyConfig.LoadFromCliArgs(cliArgs);
 #if !defined(DISABLE_MQTT)
@@ -454,6 +532,10 @@ void PlainConfig::SerializeToObject(Crt::JsonObject &object) const
     {
         object.WithString(JSON_KEY_THING_NAME, thingName->c_str());
     }
+    object.WithInt64(JSON_KEY_MQTT_KEEP_ALIVE_SEC, mqttKeepAliveSec);
+    object.WithInt64(JSON_KEY_MQTT_PING_TIMEOUT_MS, mqttPingTimeoutMs);
+    object.WithInt64(JSON_KEY_MQTT_CONNECT_TIMEOUT_MS, mqttConnectTimeoutMs);
+    object.WithInt64(JSON_KEY_MQTT_MAX_BACKOFF_SEC, mqttMaxBackoffSec);
 
     Crt::JsonObject loggingObject;
     logConfig.SerializeToObject(loggingObject);
@@ -2578,6 +2660,10 @@ bool Config::ParseCliArgs(int argc, char **argv, CliArgs &cliArgs)
         {PlainConfig::CLI_KEY, true, nullptr},
         {PlainConfig::CLI_ROOT_CA, true, nullptr},
         {PlainConfig::CLI_THING_NAME, true, nullptr},
+        {PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC, true, nullptr},
+        {PlainConfig::CLI_MQTT_PING_TIMEOUT_MS, true, nullptr},
+        {PlainConfig::CLI_MQTT_CONNECT_TIMEOUT_MS, true, nullptr},
+        {PlainConfig::CLI_MQTT_MAX_BACKOFF_SEC, true, nullptr},
 
         {PlainConfig::LogConfig::CLI_LOG_LEVEL, true, nullptr},
         {PlainConfig::LogConfig::CLI_LOG_TYPE, true, nullptr},
@@ -2953,7 +3039,7 @@ void Config::PrintHelpMessage()
         "%s <File-Location>:\t\t\t\t\t\tWrite logs to specified log file when using the file logger.\n"
         "%s \t\t\t\t\t\t\tEnable SDK Logging.\n"
         "%s <[Trace, Debug, Info, Warn, Error, Fatal]>:\t\tSpecify the log level for the SDK\n"
-        "%s <File-Location>:\t\t\t\t\t\tWrite SDK logs to specified log file.\n"
+        "%s <File-Location|stderr>:\t\t\t\t\tWrite SDK logs to specified log file, or to stderr.\n"
         "%s [true|false]:\t\t\t\t\t\tEnables/Disables Jobs feature\n"
         "%s [true|false]:\t\t\t\t\tEnables/Disables Tunneling feature\n"
         "%s [true|false]:\t\t\t\t\tEnables/Disables Device Defender feature\n"
@@ -2967,6 +3053,10 @@ void Config::PrintHelpMessage()
         "%s <Key-Location>:\t\t\t\t\t\t\tUse Specified Key file\n"
         "%s <Root-CA-Location>:\t\t\t\t\t\tUse Specified Root-CA file\n"
         "%s <thing-name-value/client-id-value>:\t\t\tUse Specified Thing Name (Also used as Client ID)\n"
+        "%s <seconds>:\t\t\t\t\tMQTT keep-alive interval (default: 480)\n"
+        "%s <milliseconds>:\t\t\t\tMQTT ping response timeout, must be less than the keep-alive (default: 15000)\n"
+        "%s <milliseconds>:\t\t\t\tTCP connect timeout for MQTT connections (default: 30000)\n"
+        "%s <seconds>:\t\t\t\t\tMaximum wait between MQTT connection attempts, at least 15 (default: 120)\n"
         "%s <Jobs-handler-directory>:\t\t\t\tUse specified directory to find job handlers\n"
         "%s <region>:\t\t\t\t\t\tUse Specified AWS Region for Secure Tunneling\n"
         "%s <service>:\t\t\t\t\t\tConnect secure tunnel to specific service\n"
@@ -3022,6 +3112,10 @@ void Config::PrintHelpMessage()
         PlainConfig::CLI_KEY,
         PlainConfig::CLI_ROOT_CA,
         PlainConfig::CLI_THING_NAME,
+        PlainConfig::CLI_MQTT_KEEP_ALIVE_SEC,
+        PlainConfig::CLI_MQTT_PING_TIMEOUT_MS,
+        PlainConfig::CLI_MQTT_CONNECT_TIMEOUT_MS,
+        PlainConfig::CLI_MQTT_MAX_BACKOFF_SEC,
         PlainConfig::Jobs::CLI_HANDLER_DIR,
         PlainConfig::Tunneling::CLI_TUNNELING_REGION,
         PlainConfig::Tunneling::CLI_TUNNELING_SERVICE,

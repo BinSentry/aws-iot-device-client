@@ -36,6 +36,8 @@ by default.
 ./aws-iot-device-client --enable-sdk-logging --sdk-log-level Warn --sdk-log-file /home/user/my-log-file.log
 ```
 
+Use `--sdk-log-file stderr` to write SDK logs to stderr instead of a file (e.g. to the systemd journal).
+
 #### Configuring the logger via the JSON configuration file
 ```
     {
