@@ -147,7 +147,7 @@ TEST(SerializeConfigTestFixture, SerializeBasicConfigTest)
     "mqtt-keep-alive-sec": 480,
     "mqtt-ping-timeout-ms": 15000,
     "mqtt-connect-timeout-ms": 30000,
-    "mqtt-max-backoff-sec": 120,
+    "mqtt-max-backoff-sec": 240,
     "logging": {
         "level": "DEBUG",
         "type": "file",

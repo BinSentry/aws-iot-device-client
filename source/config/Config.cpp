@@ -3056,7 +3056,7 @@ void Config::PrintHelpMessage()
         "%s <seconds>:\t\t\t\t\tMQTT keep-alive interval (default: 480)\n"
         "%s <milliseconds>:\t\t\t\tMQTT ping response timeout, must be less than the keep-alive (default: 15000)\n"
         "%s <milliseconds>:\t\t\t\tTCP connect timeout for MQTT connections (default: 30000)\n"
-        "%s <seconds>:\t\t\t\t\tMaximum wait between MQTT connection attempts, at least 15 (default: 120)\n"
+        "%s <seconds>:\t\t\t\t\tMaximum wait between MQTT connection attempts, at least 15 (default: 240)\n"
         "%s <Jobs-handler-directory>:\t\t\t\tUse specified directory to find job handlers\n"
         "%s <region>:\t\t\t\t\t\tUse Specified AWS Region for Secure Tunneling\n"
         "%s <service>:\t\t\t\t\t\tConnect secure tunnel to specific service\n"

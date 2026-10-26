@@ -100,7 +100,7 @@ namespace Aws
                 static constexpr uint32_t DEFAULT_MQTT_CONNECT_TIMEOUT_MS = 30 * 1000;
                 // Caps both the initial connection retries and the SDK's reconnects after a dropped connection. Once
                 // a weak link starts failing attempts, a long cap mostly delays the retry that would have succeeded.
-                static constexpr uint16_t DEFAULT_MQTT_MAX_BACKOFF_SEC = 2 * 60;
+                static constexpr uint16_t DEFAULT_MQTT_MAX_BACKOFF_SEC = 4 * 60;
                 // The SDK's reconnect backoff starts at this value, so the cap can't go below it.
                 static constexpr uint16_t MIN_MQTT_BACKOFF_SEC = 15;
                 static constexpr char JSON_KEY_JOBS[] = "jobs";
